@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Least to Greatest Sorter</title>
+    <style>
+        body {
+            font-family: 'Arial Rounded MT Bold', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f9ff;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #start-overlay, #finish-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #0984e3;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: white;
+            text-align: center;
+        }
+        #finish-overlay { background: #6c5ce7; display: none; }
+        
+        .big-btn {
+            padding: 25px 50px;
+            font-size: 2.5rem;
+            background: #00b894;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 10px 0 #006b56;
+            margin-top: 20px;
+        }
+        
+        h1 { color: #2d3436; margin-top: 10px; font-size: 1.5rem; }
+        #score-board { font-size: 1.2rem; background: #dfe6e9; padding: 5px 20px; border-radius: 20px; }
+        #instruction { font-size: 2.2rem; margin: 20px; font-weight: bold; text-align: center; min-height: 60px; }
+        
+        #game-area {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 50px;
+            height: 280px;
+            width: 90%;
+            border-bottom: 8px solid #b2bec3;
+            padding-bottom: 20px;
+        }
+
+        .sort-item {
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+        }
+
+        .number-box { background: #ffeaa7; border: 6px solid #fdcb6e; border-radius: 20px; font-size: 5rem; width: 120px; height: 120px; color: #2d3436; }
+        .circle-box { background: #fab1a0; border-radius: 50%; border: 6px solid #e17055; }
+        .thick-box { background: #81ecec; height: 200px; border-radius: 10px; border: 6px solid #00cec9; }
+
+        .dragging { opacity: 0.1; }
+
+        .btn-check {
+            margin-top: 30px;
+            padding: 15px 60px;
+            font-size: 2.2rem;
+            background: #6c5ce7;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 8px 0 #4834d4;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-overlay">
+        <h1>Math Sorting Time!</h1>
+        <button class="big-btn" onclick="startGame()">START! ▶️</button>
+    </div>
+
+    <div id="finish-overlay">
+        <h1 style="font-size: 5rem;">Great Job!</h1>
+        <p style="font-size: 2rem;">You collected 20 Stars!</p>
+        <button class="big-btn" onclick="resetGame()">Play Again 🔄</button>
+    </div>
+
+    <h1>Junior Math Sorter</h1>
+    <div id="score-board">Stars: <span id="star-count">0</span> / 20</div>
+    <div id="instruction"></div>
+    
+    <div id="game-area"></div>
+    <button class="btn-check" onclick="checkOrder()">Check! ✨</button>
+
+    <script>
+        const gameArea = document.getElementById('game-area');
+        const instruction = document.getElementById('instruction');
+        const starDisplay = document.getElementById('star-count');
+        const finishOverlay = document.getElementById('finish-overlay');
+        
+        let starsWon = 0;
+        let correctOrder = [];
+        let audioCtx;
+        let isLowToHigh = true;
+
+        function startGame() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            document.getElementById('start-overlay').style.display = 'none';
+            nextLevel();
+        }
+
+        function resetGame() {
+            starsWon = 0;
+            starDisplay.innerText = "0";
+            finishOverlay.style.display = 'none';
+            nextLevel();
+        }
+
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.85;
+            utterance.pitch = 1.1;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function playSound(isWin) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.type = 'sine';
+            if(isWin) {
+                osc.frequency.setValueAtTime(523, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1046, audioCtx.currentTime + 0.1);
+            } else {
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+            }
+            g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+        }
+
+        function nextLevel() {
+            if (starsWon >= 20) {
+                finishOverlay.style.display = 'flex';
+                speak("Great Job! You finished!");
+                return;
+            }
+
+            gameArea.innerHTML = '';
+            const types = ['number', 'circle', 'thick'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            isLowToHigh = Math.random() > 0.5;
+            
+            let vals = [];
+            if(type === 'number') {
+                while(vals.length < 3) {
+                    let r = Math.floor(Math.random() * 10) + 1;
+                    if(!vals.includes(r)) vals.push(r);
+                }
+            } else {
+                vals = [60, 120, 180];
+            }
+            
+            correctOrder = isLowToHigh ? [...vals].sort((a,b) => a - b) : [...vals].sort((a,b) => b - a);
+            
+            let shuffled = [...vals];
+            while (JSON.stringify(shuffled) === JSON.stringify(correctOrder)) {
+                shuffled.sort(() => Math.random() - 0.5);
+            }
+
+            let msg = (type === 'number') 
+                ? (isLowToHigh ? "Least to Greatest" : "Greatest to Least") 
+                : (isLowToHigh ? "Small to Big" : "Big to Small");
+
+            instruction.innerText = msg;
+            instruction.style.color = isLowToHigh ? "#0984e3" : "#d63031"; 
+            speak(msg);
+
+            shuffled.forEach(v => {
+                const el = document.createElement('div');
+                el.className = 'sort-item ' + type + '-box';
+                el.draggable = true;
+                el.dataset.val = v;
+                if(type === 'number') el.innerText = v;
+                if(type === 'circle') { el.style.width = v + 'px'; el.style.height = v + 'px'; }
+                if(type === 'thick') { el.style.width = v + 'px'; }
+
+                el.addEventListener('dragstart', () => el.classList.add('dragging'));
+                el.addEventListener('dragend', () => el.classList.remove('dragging'));
+                gameArea.appendChild(el);
+            });
+        }
+
+        gameArea.addEventListener('dragover', e => {
+            e.preventDefault();
+            const dragging = document.querySelector('.dragging');
+            if(!dragging) return;
+            const siblings = [...gameArea.querySelectorAll('.sort-item:not(.dragging)')];
+            const nextSib = siblings.find(sib => {
+                return e.clientX <= sib.getBoundingClientRect().left + sib.getBoundingClientRect().width / 2;
+            });
+            gameArea.insertBefore(dragging, nextSib);
+        });
+
+        function checkOrder() {
+            const current = [...gameArea.querySelectorAll('.sort-item')].map(i => parseInt(i.dataset.val));
+            if (JSON.stringify(current) === JSON.stringify(correctOrder)) {
+                starsWon++;
+                starDisplay.innerText = starsWon;
+                playSound(true);
+                instruction.innerText = "YAY! ⭐";
+                setTimeout(nextLevel, 1200);
+            } else {
+                playSound(false);
+                instruction.innerText = "Try again! 👇";
+            }
+        }
+    </script>
+</body>
+</html>
